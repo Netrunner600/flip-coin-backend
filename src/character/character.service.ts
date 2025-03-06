@@ -248,7 +248,7 @@ export class CharacterService {
       include: [
         {
           model: Character,
-          attributes: ["name", "country", "countryCode", "loveAvatarUrl", "hateAvatarUrl", "avatarUrl"], // Include character name
+          attributes: ["name", "country", "countryCode", "loveAvatarUrl", "hateAvatarUrl", "avatarUrl","headAvatarUrl"], // Include character name
         },
       ],
       raw: true
@@ -267,7 +267,7 @@ export class CharacterService {
         {
           model: Character,
           // attributes: ["name"], // Include character name
-          attributes: ["name", "country", "countryCode", "loveAvatarUrl", "hateAvatarUrl", "avatarUrl"],
+          attributes: ["name", "country", "countryCode", "loveAvatarUrl", "hateAvatarUrl", "avatarUrl","headAvatarUrl"],
         },
       ],
       raw: true
