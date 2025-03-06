@@ -32,6 +32,18 @@ export class Character extends Model {
   @Column({ type: DataType.STRING, allowNull: true })
   loveAvatarUrl: string;
 
+  @Column({ type: DataType.STRING, allowNull: false })
+  mobileAvatarUrl: string;
+
+  @Column({ type: DataType.STRING, allowNull: true })
+  mobileHateAvatarUrl: string;
+
+  @Column({ type: DataType.STRING, allowNull: true })
+  mobileLoveAvatarUrl: string;
+
+  @Column({ type: DataType.STRING, allowNull: false })
+  headAvatarUrl: string;
+
   @Column({ type: DataType.STRING, allowNull: true })
   country: string;
 

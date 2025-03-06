@@ -72,9 +72,43 @@ export class CharacterService {
   ) { }
 
 
+  // async getAllCharacters(userId: string) {
+  //   const last24Hours = new Date();
+  //   last24Hours.setHours(last24Hours.getHours() - 24);
+  //   const charactersWithUserPoints = await this.characterModel.findAll({
+  //     attributes: [
+  //       "id",
+  //       "name",
+  //       "avatarUrl",
+  //       "hateAvatarUrl",
+  //       "loveAvatarUrl",
+  //       "country"
+  //       [Sequelize.fn("COALESCE", Sequelize.fn("SUM", Sequelize.col("history.pointsChange")), 0), "totalPoints"],
+  //       [Sequelize.fn("COALESCE", Sequelize.fn("SUM", Sequelize.col("history.totalPlus")), 0), "totalPlus"],
+  //       [Sequelize.fn("COALESCE", Sequelize.fn("SUM", Sequelize.col("history.totalMinus")), 0), "totalMinus"],
+  //     ],
+  //     include: [
+  //       {
+  //         model: this.pointsHistoryModel,
+  //         as: "history",
+  //         attributes: ['sessionId'],
+  //         required: false,
+  //         // on: Sequelize.literal(`history.sessionId = '${userId}'`),  // ✅ Force LEFT JOIN
+  //         where: { created_at: { [Op.gte]: last24Hours }, sessionId: userId },
+  //       },
+  //     ],
+  //     group: ["Character.id"],
+  //     raw: true,
+  //   });
+
+  //   console.log(charactersWithUserPoints,'===================================');
+  //   return charactersWithUserPoints;
+  // }
+
   async getAllCharacters(userId: string) {
     const last24Hours = new Date();
     last24Hours.setHours(last24Hours.getHours() - 24);
+  
     const charactersWithUserPoints = await this.characterModel.findAll({
       attributes: [
         "id",
@@ -82,9 +116,14 @@ export class CharacterService {
         "avatarUrl",
         "hateAvatarUrl",
         "loveAvatarUrl",
+        "mobileAvatarUrl",
+        "mobileHateAvatarUrl", // Including this
+        "mobileLoveAvatarUrl", // Including this
+        "headAvatarUrl",
         [Sequelize.fn("COALESCE", Sequelize.fn("SUM", Sequelize.col("history.pointsChange")), 0), "totalPoints"],
         [Sequelize.fn("COALESCE", Sequelize.fn("SUM", Sequelize.col("history.totalPlus")), 0), "totalPlus"],
         [Sequelize.fn("COALESCE", Sequelize.fn("SUM", Sequelize.col("history.totalMinus")), 0), "totalMinus"],
+        [Sequelize.fn("MIN", Sequelize.col("Character.created_at")), "created_at"] // Avoid group-by issue
       ],
       include: [
         {
@@ -92,17 +131,28 @@ export class CharacterService {
           as: "history",
           attributes: ['sessionId'],
           required: false,
-          // on: Sequelize.literal(`history.sessionId = '${userId}'`),  // ✅ Force LEFT JOIN
           where: { created_at: { [Op.gte]: last24Hours }, sessionId: userId },
         },
       ],
-      group: ["Character.id"],
+      group: [
+        "Character.id",
+        "Character.name",
+        "Character.avatarUrl",
+        "Character.hateAvatarUrl",
+        "Character.loveAvatarUrl",
+        "Character.mobileAvatarUrl",
+        "Character.mobileHateAvatarUrl",
+        "Character.mobileLoveAvatarUrl",
+        "Character.headAvatarUrl"
+      ],
       raw: true,
     });
-
-    console.log(charactersWithUserPoints);
+  
+    console.log(charactersWithUserPoints)
     return charactersWithUserPoints;
   }
+  
+  
 
   async updateCharacterPoints(id: string, increment: boolean, country: string, countryCode: string, sessionId: string) {
     const character = await this.characterModel.findByPk(id);
