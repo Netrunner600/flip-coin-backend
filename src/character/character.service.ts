@@ -104,6 +104,7 @@ export class CharacterService {
   //   console.log(charactersWithUserPoints,'===================================');
   //   return charactersWithUserPoints;
   // }
+  // 2F1740406796973-243773678
 
   async getAllCharacters(userId: string) {
     const last24Hours = new Date();
