@@ -109,7 +109,7 @@ export class CharacterService {
   async getAllCharacters(userId: string) {
     const last24Hours = new Date();
     last24Hours.setHours(last24Hours.getHours() - 24);
-  
+
     const charactersWithUserPoints = await this.characterModel.findAll({
       attributes: [
         "id",
@@ -148,12 +148,10 @@ export class CharacterService {
       ],
       raw: true,
     });
-  
+
     console.log(charactersWithUserPoints)
     return charactersWithUserPoints;
   }
-  
-  
 
   async updateCharacterPoints(id: string, increment: boolean, country: string, countryCode: string, sessionId: string) {
     const character = await this.characterModel.findByPk(id);
@@ -225,12 +223,8 @@ export class CharacterService {
     console.log("updatedPointsupdatedPoints", updatedPoints)
     this.socketGateway.sendToUser(sessionId, 'characterUpdatedForUser', updatedPoints);
 
-
     return character;
   }
-
-
-
 
   async getStats() {
     const last24Hours = new Date();
@@ -249,7 +243,7 @@ export class CharacterService {
       include: [
         {
           model: Character,
-          attributes: ["name", "country", "countryCode", "loveAvatarUrl", "hateAvatarUrl", "avatarUrl","headAvatarUrl"], // Include character name
+          attributes: ["name", "country", "countryCode", "loveAvatarUrl", "hateAvatarUrl", "avatarUrl", "headAvatarUrl"], // Include character name
         },
       ],
       raw: true
@@ -268,7 +262,7 @@ export class CharacterService {
         {
           model: Character,
           // attributes: ["name"], // Include character name
-          attributes: ["name", "country", "countryCode", "loveAvatarUrl", "hateAvatarUrl", "avatarUrl","headAvatarUrl"],
+          attributes: ["name", "country", "countryCode", "loveAvatarUrl", "hateAvatarUrl", "avatarUrl", "headAvatarUrl"],
         },
       ],
       raw: true
