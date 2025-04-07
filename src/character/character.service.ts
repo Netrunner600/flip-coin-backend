@@ -236,7 +236,11 @@ export class CharacterService {
         "characterId",
         [Sequelize.fn("SUM", Sequelize.col("pointsChange")), "totalPoints"],
         [Sequelize.fn("SUM", Sequelize.col("totalPlus")), "totalPlus"],
-        [Sequelize.fn("SUM", Sequelize.col("totalMinus")), "totalMinus"],
+        // [Sequelize.fn("SUM", Sequelize.col("totalMinus")), "totalMinus"],
+        [
+          Sequelize.fn("ABS", Sequelize.fn("SUM", Sequelize.cast(Sequelize.col("totalMinus"), "INTEGER"))),
+          "totalMinus"
+        ],
       ],
       where: { created_at: { [Op.gte]: last24Hours } },
       group: ["characterId"],
@@ -255,7 +259,11 @@ export class CharacterService {
         "characterId",
         [Sequelize.fn("SUM", Sequelize.col("pointsChange")), "totalPoints"],
         [Sequelize.fn("SUM", Sequelize.col("totalPlus")), "totalPlus"],
-        [Sequelize.fn("SUM", Sequelize.col("totalMinus")), "totalMinus"],
+        // [Sequelize.fn("SUM", Sequelize.col("totalMinus")), "totalMinus"],
+        [
+          Sequelize.fn("ABS", Sequelize.fn("SUM", Sequelize.cast(Sequelize.col("totalMinus"), "INTEGER"))),
+          "totalMinus"
+        ],
       ],
       group: ["characterId"],
       include: [
@@ -275,7 +283,11 @@ export class CharacterService {
         "countryCode",
         [Sequelize.fn("SUM", Sequelize.col("pointsChange")), "totalPoints"],
         [Sequelize.fn("SUM", Sequelize.col("totalPlus")), "totalPlus"],
-        [Sequelize.fn("SUM", Sequelize.col("totalMinus")), "totalMinus"],
+        // [Sequelize.fn("SUM", Sequelize.col("totalMinus")), "totalMinus"],
+        [
+          Sequelize.fn("ABS", Sequelize.fn("SUM", Sequelize.cast(Sequelize.col("totalMinus"), "INTEGER"))),
+          "totalMinus"
+        ],
       ],
       where: { country: { [Op.ne]: null } },
       group: ["country", 'countryCode'],
@@ -318,7 +330,11 @@ export class CharacterService {
 
           [Sequelize.fn("SUM", Sequelize.cast(Sequelize.col("pointsChange"), "INTEGER")), "totalPoints"],
           [Sequelize.fn("SUM", Sequelize.cast(Sequelize.col("totalPlus"), "INTEGER")), "totalPlus"],
-          [Sequelize.fn("SUM", Sequelize.cast(Sequelize.col("totalMinus"), "INTEGER")), "totalMinus"],
+          // [Sequelize.fn("SUM", Sequelize.cast(Sequelize.col("totalMinus"), "INTEGER")), "totalMinus"],
+          [
+            Sequelize.fn("ABS", Sequelize.fn("SUM", Sequelize.cast(Sequelize.col("totalMinus"), "INTEGER"))),
+            "totalMinus"
+          ],
         ],
         where: { characterId: id, sessionId: userId },
         group: ["characterId", 'sessionId', "country",
