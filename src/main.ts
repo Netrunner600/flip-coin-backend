@@ -2,6 +2,8 @@ import { NestFactory } from "@nestjs/core";
 import { AppModule } from "./app.module";
 import * as dotenv from "dotenv";
 import * as bodyParser from "body-parser";
+import * as http from "http";
+import { Server } from "socket.io";
 
 async function bootstrap() {
   dotenv.config();
@@ -18,6 +20,21 @@ async function bootstrap() {
     credentials: true, 
   });
 
+  const server = http.createServer(app.getHttpAdapter().getInstance());
+
+  const io = new Server(server, {
+    cors: {
+      origin: ["https://flipn.click", "http://localhost:3000"],
+      methods: ["GET", "POST"],
+      credentials: true,
+    },
+  });
+
+  io.on("connection", (socket) => {
+    console.log("Socket connected:", socket.id);
+    // Your socket events here
+  });
+
   process.on("uncaughtException", (error) => {
     console.error("Uncaught Exception:", error);
   });
@@ -27,8 +44,10 @@ async function bootstrap() {
   });
 
   const PORT = process.env.SERVER_PORT || 8000;
-  await app.listen(PORT);
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+
+  server.listen(PORT, () => {
+    console.log(`🚀 HTTP + Socket.IO server running on http://localhost:${PORT}`);
+  });
 }
 
 bootstrap();

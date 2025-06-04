@@ -1,7 +1,13 @@
 import { ConnectedSocket, MessageBody, SubscribeMessage, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 
-@WebSocketGateway({ cors: true })
+@WebSocketGateway({
+  cors: {
+    origin: ["https://flipn.click", "http://localhost:3000"],
+    methods: ["GET", "POST"],
+    credentials: false,
+  },
+})
 export class SocketGateway {
   @WebSocketServer()
   server: Server;
