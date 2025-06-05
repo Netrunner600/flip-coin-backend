@@ -3,10 +3,13 @@ import { Server, Socket } from 'socket.io';
 
 @WebSocketGateway({
   cors: {
-    origin: ["https://flipn.click", "http://localhost:3000"],
+    origin: "*",
     methods: ["GET", "POST"],
-    credentials: false,
+    credentials: true,
+    allowedHeaders: ["*"],
   },
+  transports: ['websocket', 'polling'],
+  path: '/socket.io/',
 })
 export class SocketGateway {
   @WebSocketServer()

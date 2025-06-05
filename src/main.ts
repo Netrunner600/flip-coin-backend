@@ -24,10 +24,13 @@ async function bootstrap() {
 
   const io = new Server(server, {
     cors: {
-      origin: ["https://flipn.click", "http://localhost:3000"],
+      origin: "*",
       methods: ["GET", "POST"],
       credentials: true,
+      allowedHeaders: ["*"],
     },
+    transports: ['websocket', 'polling'],
+    path: '/socket.io/',
   });
 
   io.on("connection", (socket) => {
