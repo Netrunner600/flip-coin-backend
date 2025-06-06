@@ -19,10 +19,11 @@ async function bootstrap() {
   app.use(bodyParser.json({ limit: "100mb" }));
   app.use(bodyParser.urlencoded({ extended: true }));
 
+  // Update CORS configuration to allow all origins
   app.enableCors({
-    origin: ['http://localhost:3000', 'https://flipn.click'],
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'sessionId'],
+    origin: true, // Allow all origins
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: 'Content-Type,Accept,Authorization,sessionId',
     credentials: true,
     preflightContinue: false,
     optionsSuccessStatus: 204
