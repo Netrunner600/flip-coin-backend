@@ -2,6 +2,12 @@ import { ConnectedSocket, MessageBody, SubscribeMessage, WebSocketGateway, WebSo
 import { Server, Socket } from 'socket.io';
 
 @WebSocketGateway({
+  cors: {
+    origin: true,
+    methods: ['GET', 'POST'],
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization', 'sessionId']
+  },
   transports: ['websocket', 'polling'],
   allowEIO3: true,
   pingTimeout: 60000,
@@ -11,11 +17,22 @@ export class SocketGateway {
   @WebSocketServer()
   server: Server;
 
+  afterInit(server: Server) {
+    console.log('WebSocket Gateway initialized');
+  }
+
+  handleConnection(client: Socket) {
+    console.log(`Client connected: ${client.id}`);
+  }
+
+  handleDisconnect(client: Socket) {
+    console.log(`Client disconnected: ${client.id}`);
+  }
+
   sendUpdate(event: string, data: any) {
     this.server.emit(event, data);
   }
 
-  
   sendToUser(sessionId: string, event: string, data: any) {
     const client = Array.from(this.server.sockets.sockets.values()).find(
       (socket) => socket.handshake.headers.sessionid === sessionId

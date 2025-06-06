@@ -19,9 +19,30 @@ async function bootstrap() {
   app.use(bodyParser.json({ limit: "100mb" }));
   app.use(bodyParser.urlencoded({ extended: true }));
 
-  // CORS configuration for Nginx reverse proxy
+  // CORS configuration for WebSocket and HTTP
   app.enableCors({
-    origin: true, // Allow all origins
+    origin: function(origin, callback) {
+      const allowedOrigins = [
+        'http://localhost:3000',
+        'https://flipn.click',
+        'https://d51e-103-149-154-170.ngrok-free.app',
+        /\.ngrok-free\.app$/
+      ];
+      
+      // Allow requests with no origin (like mobile apps, curl, etc)
+      if (!origin) return callback(null, true);
+      
+      if (allowedOrigins.some(allowedOrigin => {
+        if (allowedOrigin instanceof RegExp) {
+          return allowedOrigin.test(origin);
+        }
+        return allowedOrigin === origin;
+      })) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     allowedHeaders: 'Content-Type,Accept,Authorization,sessionId',
     credentials: true,
