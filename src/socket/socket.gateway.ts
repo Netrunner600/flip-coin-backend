@@ -2,12 +2,6 @@ import { ConnectedSocket, MessageBody, SubscribeMessage, WebSocketGateway, WebSo
 import { Server, Socket } from 'socket.io';
 
 @WebSocketGateway({
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST'],
-    credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'sessionId']
-  },
   transports: ['websocket', 'polling'],
   allowEIO3: true,
   pingTimeout: 60000,

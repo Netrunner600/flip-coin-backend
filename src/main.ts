@@ -21,13 +21,11 @@ async function bootstrap() {
 
   // Update CORS configuration with a single origin value
   app.enableCors({
-    origin: '*', // Allow all origins with a single value
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    allowedHeaders: 'Content-Type,Accept,Authorization,sessionId',
+    origin: (origin, callback) => callback(null, origin || '*'),
     credentials: true,
-    preflightContinue: false,
-    optionsSuccessStatus: 204
-  });
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: '*', // ✅ Allow any custom headers
+  })
 
   process.on("uncaughtException", (error) => {
     console.error("Uncaught Exception:", error);
