@@ -6,7 +6,7 @@ import databaseConfig from './config/database.config';
 import { SequelizeModule } from '@nestjs/sequelize';
 import { CharacterModule } from './character/character.module';
 import { LeaderboardModule } from './leaderboard/leaderboard.module';
-import { RedisModule } from './redis/redis.module';
+// import { RedisModule } from './redis/redis.module';
 import { SocketGateway } from './socket/socket.gateway';
 import { Character } from './character/entity/character.model';
 import { PointsHistory } from './history/points-history.model';
@@ -50,7 +50,7 @@ import { CacheModule } from '@nestjs/cache-manager';
     }),
     CharacterModule,
     LeaderboardModule,
-    RedisModule
+    // RedisModule
   ],
   controllers: [AppController],
   providers: [AppService,SocketGateway],

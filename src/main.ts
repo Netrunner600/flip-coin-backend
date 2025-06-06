@@ -19,9 +19,9 @@ async function bootstrap() {
   app.use(bodyParser.json({ limit: "100mb" }));
   app.use(bodyParser.urlencoded({ extended: true }));
 
-  // Update CORS configuration to allow all origins
+  // Update CORS configuration with a single origin value
   app.enableCors({
-    origin: true, // Allow all origins
+    origin: '*', // Allow all origins with a single value
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     allowedHeaders: 'Content-Type,Accept,Authorization,sessionId',
     credentials: true,
