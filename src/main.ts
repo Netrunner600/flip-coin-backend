@@ -19,13 +19,15 @@ async function bootstrap() {
   app.use(bodyParser.json({ limit: "100mb" }));
   app.use(bodyParser.urlencoded({ extended: true }));
 
-  // Update CORS configuration with a single origin value
+  // CORS configuration for Nginx reverse proxy
   app.enableCors({
-    origin: (origin, callback) => callback(null, origin || '*'),
-    credentials: true,
+    origin: true, // Allow all origins
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    allowedHeaders: '*', // ✅ Allow any custom headers
-  })
+    allowedHeaders: 'Content-Type,Accept,Authorization,sessionId',
+    credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 204
+  });
 
   process.on("uncaughtException", (error) => {
     console.error("Uncaught Exception:", error);
