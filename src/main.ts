@@ -7,6 +7,13 @@ import * as https from 'https';
 
 async function bootstrap() {
   dotenv.config();
+  
+  // Debug logging
+  console.log('Environment variables:', {
+    USE_HTTPS: process.env.USE_HTTPS,
+    SERVER_PORT: process.env.SERVER_PORT
+  });
+
   const app = await NestFactory.create(AppModule);
 
   app.use(bodyParser.json({ limit: "100mb" }));
@@ -31,18 +38,31 @@ async function bootstrap() {
 
   const PORT = process.env.SERVER_PORT || 8000;
   
-  // Check if SSL certificates exist
-  const httpsOptions = {
-    key: fs.readFileSync(process.env.SSL_KEY_PATH || ''),
-    cert: fs.readFileSync(process.env.SSL_CERT_PATH || ''),
-  };
+  // Only setup HTTPS if explicitly enabled
+  if (process.env.USE_HTTPS === 'true') {
+    try {
+      // Check if SSL certificates are provided
+      if (!process.env.SSL_KEY_PATH || !process.env.SSL_CERT_PATH) {
+        throw new Error('SSL certificates are required for HTTPS. Please provide SSL_KEY_PATH and SSL_CERT_PATH in .env file');
+      }
 
-  if (process.env.USE_HTTPS === 'true' && httpsOptions.key && httpsOptions.cert) {
-    const httpsServer = https.createServer(httpsOptions, app.getHttpAdapter().getInstance());
-    await app.init();
-    httpsServer.listen(PORT);
-    console.log(`🚀 Server running on https://localhost:${PORT}`);
+      const httpsOptions = {
+        key: fs.readFileSync(process.env.SSL_KEY_PATH),
+        cert: fs.readFileSync(process.env.SSL_CERT_PATH),
+      };
+
+      const httpsServer = https.createServer(httpsOptions, app.getHttpAdapter().getInstance());
+      await app.init();
+      httpsServer.listen(PORT);
+      console.log(`🚀 Server running on https://localhost:${PORT}`);
+    } catch (error) {
+      console.error('Error setting up HTTPS server:', error.message);
+      console.log('Falling back to HTTP server...');
+      await app.listen(PORT);
+      console.log(`🚀 Server running on http://localhost:${PORT}`);
+    }
   } else {
+    // Run in HTTP mode
     await app.listen(PORT);
     console.log(`🚀 Server running on http://localhost:${PORT}`);
   }
