@@ -6,12 +6,13 @@ import { Server, Socket } from 'socket.io';
     origin: true,
     methods: ['GET', 'POST'],
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'sessionId']
+    allowedHeaders: ['Content-Type', 'Authorization', 'sessionId', 'Access-Control-Allow-Origin']
   },
   transports: ['websocket', 'polling'],
   allowEIO3: true,
   pingTimeout: 60000,
-  pingInterval: 25000
+  pingInterval: 25000,
+  path: '/socket.io/'
 })
 export class SocketGateway {
   @WebSocketServer()
