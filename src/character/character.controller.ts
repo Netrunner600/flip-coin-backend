@@ -71,4 +71,20 @@ export class CharacterController {
         return this.characterService.characterPointsData(id,userId);
     }
 
+    @Post('batch-update')
+    async batchUpdatePoints(
+        @Body() data: { 
+            sessionId: string; 
+            points: Array<{ 
+                characterId: string; 
+                totalPlus: number;
+                totalMinus: number;
+                pointsChange: number;
+                lastUpdate: number;
+            }>;
+        }
+    ) {
+        return this.characterService.batchUpdatePoints(data.sessionId, data);
+    }
+
 }

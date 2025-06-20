@@ -1,66 +1,11 @@
-// import { Injectable } from '@nestjs/common';
-// import { InjectModel } from '@nestjs/sequelize';
-
-// import { Server } from 'socket.io';
-// import { CacheService } from 'src/cache/cache.service';
-// import { Character } from './entity/character.model';
-// import { Sequelize } from 'sequelize';
-
-
-// @Injectable()
-// export class CharacterService {
-//   constructor(
-//     @InjectModel(Character) private characterModel: typeof Character,
-//     private cacheService: CacheService,
-//   ) {}
-
-//   async getAllCharacters() {
-//     const cachedCharacters = await this.cacheService.get('characters');
-//     if (cachedCharacters) return JSON.parse(cachedCharacters);
-
-//     const characters = await this.characterModel.findAll();
-//     await this.cacheService.set('characters', characters, 60);
-//     return characters;
-//   }
-
-//   async updateCharacterPoints(id: number, increment: boolean, country: string, io: Server) {
-//     const character = await this.characterModel.findByPk(id);
-//     if (!character) throw new Error('Character not found');
-
-//     character.points += increment ? 1 : -1;
-//     character.points24h += increment ? 1 : -1;
-//     character.country = country;
-//     await character.save();
-
-//     await this.cacheService.del('characters');
-//     io.emit('characterUpdated', { id: character.id, points: character.points, points24h: character.points24h, country: character.country });
-
-//     return character;
-//   }
-
-//   async getLeaderboard(type: string) {
-//     if (type === '24h') {
-//       return this.characterModel.findAll({ order: [['points24h', 'DESC']], limit: 10 });
-//     } else if (type === 'allTime') {
-//       return this.characterModel.findAll({ order: [['points', 'DESC']], limit: 10 });
-//     } else if (type === 'country') {
-//       return this.characterModel.findAll({
-//         attributes: ['country', [Sequelize.fn('SUM', Sequelize.col('points')), 'totalPoints']],
-//         group: ['country'],
-//         order: [[Sequelize.literal('totalPoints'), 'DESC']],
-//       });
-//     }
-//     return [];
-//   }
-// }
-
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
+import { Op } from 'sequelize';
 
 import { PointsHistory } from '../history/points-history.model';
 import { Character } from './entity/character.model';
 import { SocketGateway } from 'src/socket/socket.gateway';
-import { Op, Sequelize } from 'sequelize';
+import { Sequelize } from 'sequelize';
 
 
 @Injectable()
@@ -70,41 +15,6 @@ export class CharacterService {
     @InjectModel(PointsHistory) private pointsHistoryModel: typeof PointsHistory,
     private socketGateway: SocketGateway
   ) { }
-
-
-  // async getAllCharacters(userId: string) {
-  //   const last24Hours = new Date();
-  //   last24Hours.setHours(last24Hours.getHours() - 24);
-  //   const charactersWithUserPoints = await this.characterModel.findAll({
-  //     attributes: [
-  //       "id",
-  //       "name",
-  //       "avatarUrl",
-  //       "hateAvatarUrl",
-  //       "loveAvatarUrl",
-  //       "country"
-  //       [Sequelize.fn("COALESCE", Sequelize.fn("SUM", Sequelize.col("history.pointsChange")), 0), "totalPoints"],
-  //       [Sequelize.fn("COALESCE", Sequelize.fn("SUM", Sequelize.col("history.totalPlus")), 0), "totalPlus"],
-  //       [Sequelize.fn("COALESCE", Sequelize.fn("SUM", Sequelize.col("history.totalMinus")), 0), "totalMinus"],
-  //     ],
-  //     include: [
-  //       {
-  //         model: this.pointsHistoryModel,
-  //         as: "history",
-  //         attributes: ['sessionId'],
-  //         required: false,
-  //         // on: Sequelize.literal(`history.sessionId = '${userId}'`),  // ✅ Force LEFT JOIN
-  //         where: { created_at: { [Op.gte]: last24Hours }, sessionId: userId },
-  //       },
-  //     ],
-  //     group: ["Character.id"],
-  //     raw: true,
-  //   });
-
-  //   console.log(charactersWithUserPoints,'===================================');
-  //   return charactersWithUserPoints;
-  // }
-  // 2F1740406796973-243773678
 
   async getAllCharacters(userId: string) {
     const last24Hours = new Date();
@@ -383,5 +293,135 @@ export class CharacterService {
     }
   }
 
+  async batchUpdatePoints(
+    sessionId: string,
+    data: {
+      points: Array<{
+        characterId: string;
+        totalPlus: number;
+        totalMinus: number;
+        pointsChange: number;
+        lastUpdate: number;
+      }>
+    }
+  ) {
+    const updates = data.points.map(async ({ characterId, totalPlus, totalMinus, pointsChange }) => {
+      const character = await this.characterModel.findByPk(characterId);
+      if (!character) return;
+
+      // Get today's date range
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+
+      // Find existing entry for today
+      const existingEntry = await this.pointsHistoryModel.findOne({
+        where: {
+          characterId,
+          sessionId,
+          created_at: {
+            [Op.between]: [todayStart, todayEnd]
+          }
+        },
+        raw: true
+      });
+
+      console.log("existingEntryexistingEntry", existingEntry);
+      console.log("Incoming data:", { totalPlus, totalMinus, pointsChange });
+
+      if (existingEntry) {
+        // Calculate new values
+        const newTotalPlus = Number(existingEntry.totalPlus) + Number(totalPlus);
+        const newTotalMinus = Number(existingEntry.totalMinus) + Number(totalMinus);
+        const newPointsChange = Number(newTotalPlus) - Number(newTotalMinus);
+
+
+        await this.pointsHistoryModel.update(
+          {
+            totalPlus: newTotalPlus,
+            totalMinus: newTotalMinus,
+            pointsChange: newPointsChange,
+          },
+          {
+            where: {
+              characterId,
+              sessionId,
+            },
+          }
+        );
+
+        // Emit update to all connected clients
+        // this.socketGateway.server.emit('characterUpdated', {
+        //   id: characterId,
+        //   points: newPointsChange
+        // });
+
+        // Emit update to specific user
+        // this.socketGateway.server.emit('characterUpdatedForUser', {
+        //   points: {
+        //     characterId,
+        //     sessionId,
+        //     totalPoints: newPointsChange
+        //   }
+        // });
+      } else {
+
+        //    await this.pointsHistoryModel.create({
+        //   characterId: id,
+        //   country,
+        //   sessionId: sessionId,
+        //   countryCode,
+        //   totalPlus: increment ? 1 : 0,
+        //   totalMinus: increment ? 0 : 1,
+        //   pointsChange: increment ? 1 : -1,
+        // });
+
+        console.log("CCCCCCCCCCCCrr")
+        // Create new entry if none exists for today
+        const newEntry = await this.pointsHistoryModel.create({
+          characterId,
+          sessionId,
+          totalPlus,
+          totalMinus,
+          pointsChange: totalPlus - totalMinus
+        });
+
+        // Emit update to all connected clients
+        // this.socketGateway.server.emit('characterUpdated', {
+        //   id: characterId,
+        //   points: pointsChange
+        // });
+
+        // // Emit update to specific user
+        // this.socketGateway.server.emit('characterUpdatedForUser', {
+        //   points: {
+        //     characterId,
+        //     sessionId,
+        //     totalPoints: pointsChange
+        //   }
+        // });
+      }
+
+      let allPoints = await this.pointsHistoryModel.findAll({ raw: true });
+      const updatedCharacter = await this.characterModel.findByPk(characterId, { raw: true });
+
+      this.socketGateway.sendUpdate("characterUpdated", updatedCharacter);
+      let data = await this.getStats()
+      this.socketGateway.sendUpdate("statsChanged", data)
+      // 🔹 Emit updated stats as well (Frontend expects "statsUpdated" event)
+      const totalPoints = await this.pointsHistoryModel.sum("pointsChange");
+      this.socketGateway.sendUpdate("statsUpdated", { totalPoints });
+      // console.log("updatedCharacterupdatedCharacterupdatedCharacter", updatedCharacter)
+      // this.socketGateway.sendToUser(sessionId, 'characterPointsUpdated', updatedCharacter);
+      const updatedPoints = await this.characterPointsData(characterId, sessionId);
+      console.log("updatedPointsupdatedPoints", updatedPoints)
+      this.socketGateway.sendToUser(sessionId, 'characterUpdatedForUser', updatedPoints);
+
+    });
+
+    await Promise.all(updates);
+    return { success: true };
+  }
 
 }
