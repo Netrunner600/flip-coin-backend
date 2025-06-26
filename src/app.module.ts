@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import databaseConfig from './config/database.config';
 import { SequelizeModule } from '@nestjs/sequelize';
 import { CharacterModule } from './character/character.module';
@@ -14,6 +15,7 @@ import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { redisStore } from 'cache-manager-redis-store';
 import { CacheModule } from '@nestjs/cache-manager';
+import { AlgorithmicClicksService } from './services/algorithmic-clicks.service';
 
 @Module({
   imports: [
@@ -22,6 +24,7 @@ import { CacheModule } from '@nestjs/cache-manager';
       load: [databaseConfig],
       envFilePath: '.env',
     }),
+    ScheduleModule.forRoot(),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'public'), 
       serveRoot: '/public', 
@@ -53,7 +56,7 @@ import { CacheModule } from '@nestjs/cache-manager';
     // RedisModule
   ],
   controllers: [AppController],
-  providers: [AppService,SocketGateway],
+  providers: [AppService, SocketGateway, AlgorithmicClicksService],
 
 
 

@@ -380,4 +380,17 @@ export class CharacterService {
     return { success: true };
   }
 
+  async getAllCharactersForAlgorithmic() {
+    try {
+      const characters = await this.characterModel.findAll({
+        attributes: ['id', 'name', 'avatarUrl'],
+        raw: true,
+      });
+      return characters;
+    } catch (error) {
+      console.error('Error fetching characters for algorithmic clicks:', error);
+      return [];
+    }
+  }
+
 }
