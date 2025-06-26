@@ -127,12 +127,12 @@ export class AlgorithmicClicksService {
           );
 
           // Add delay between individual clicks
-          await new Promise(resolve => setTimeout(resolve, 100)); // 100ms delay between each click
+          // await new Promise(resolve => setTimeout(resolve, 10)); // 100ms delay between each click
         }
 
         // Add longer delay between batches
         if (batch < totalBatches - 1) {
-          await new Promise(resolve => setTimeout(resolve, 500)); // 500ms delay between batches
+          await new Promise(resolve => setTimeout(resolve, 300)); // 500ms delay between batches
         }
       }
 
