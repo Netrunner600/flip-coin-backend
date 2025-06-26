@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Op } from 'sequelize';
-
 import { PointsHistory } from '../history/points-history.model';
 import { Character } from './entity/character.model';
 import { SocketGateway } from 'src/socket/socket.gateway';
@@ -295,6 +294,7 @@ export class CharacterService {
 
   async batchUpdatePoints(
     sessionId: string,
+
     data: {
       points: Array<{
         characterId: string;
@@ -303,12 +303,12 @@ export class CharacterService {
         pointsChange: number;
         lastUpdate: number;
       }>
-    }
+    },
+    country, countryCode
   ) {
     const updates = data.points.map(async ({ characterId, totalPlus, totalMinus, pointsChange }) => {
       const character = await this.characterModel.findByPk(characterId);
       if (!character) return;
-
       // Get today's date range
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
@@ -322,14 +322,13 @@ export class CharacterService {
           sessionId,
           created_at: {
             [Op.between]: [todayStart, todayEnd]
-          }
+          },
+          country: country,
+          countryCode: countryCode,
+
         },
         raw: true
       });
-
-      console.log("existingEntryexistingEntry", existingEntry);
-      console.log("Incoming data:", { totalPlus, totalMinus, pointsChange });
-
       if (existingEntry) {
         // Calculate new values
         const newTotalPlus = Number(existingEntry.totalPlus) + Number(totalPlus);
@@ -346,76 +345,33 @@ export class CharacterService {
           {
             where: {
               characterId,
+              country,
+              countryCode,
               sessionId,
             },
           }
         );
-
-        // Emit update to all connected clients
-        // this.socketGateway.server.emit('characterUpdated', {
-        //   id: characterId,
-        //   points: newPointsChange
-        // });
-
-        // Emit update to specific user
-        // this.socketGateway.server.emit('characterUpdatedForUser', {
-        //   points: {
-        //     characterId,
-        //     sessionId,
-        //     totalPoints: newPointsChange
-        //   }
-        // });
       } else {
-
-        //    await this.pointsHistoryModel.create({
-        //   characterId: id,
-        //   country,
-        //   sessionId: sessionId,
-        //   countryCode,
-        //   totalPlus: increment ? 1 : 0,
-        //   totalMinus: increment ? 0 : 1,
-        //   pointsChange: increment ? 1 : -1,
-        // });
-
-        console.log("CCCCCCCCCCCCrr")
         // Create new entry if none exists for today
         const newEntry = await this.pointsHistoryModel.create({
           characterId,
           sessionId,
           totalPlus,
           totalMinus,
-          pointsChange: totalPlus - totalMinus
+          pointsChange: totalPlus - totalMinus,
+          country,
+          countryCode,
         });
-
-        // Emit update to all connected clients
-        // this.socketGateway.server.emit('characterUpdated', {
-        //   id: characterId,
-        //   points: pointsChange
-        // });
-
-        // // Emit update to specific user
-        // this.socketGateway.server.emit('characterUpdatedForUser', {
-        //   points: {
-        //     characterId,
-        //     sessionId,
-        //     totalPoints: pointsChange
-        //   }
-        // });
       }
 
       let allPoints = await this.pointsHistoryModel.findAll({ raw: true });
       const updatedCharacter = await this.characterModel.findByPk(characterId, { raw: true });
-
       this.socketGateway.sendUpdate("characterUpdated", updatedCharacter);
       let data = await this.getStats()
       this.socketGateway.sendUpdate("statsChanged", data)
-      // 🔹 Emit updated stats as well (Frontend expects "statsUpdated" event)
       const totalPoints = await this.pointsHistoryModel.sum("pointsChange");
       this.socketGateway.sendUpdate("statsUpdated", { totalPoints });
-      // console.log("updatedCharacterupdatedCharacterupdatedCharacter", updatedCharacter)
-      // this.socketGateway.sendToUser(sessionId, 'characterPointsUpdated', updatedCharacter);
       const updatedPoints = await this.characterPointsData(characterId, sessionId);
-      console.log("updatedPointsupdatedPoints", updatedPoints)
       this.socketGateway.sendToUser(sessionId, 'characterUpdatedForUser', updatedPoints);
 
     });

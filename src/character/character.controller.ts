@@ -75,6 +75,8 @@ export class CharacterController {
     async batchUpdatePoints(
         @Body() data: { 
             sessionId: string; 
+            country:string;
+            countryCode:string;
             points: Array<{ 
                 characterId: string; 
                 totalPlus: number;
@@ -84,7 +86,25 @@ export class CharacterController {
             }>;
         }
     ) {
-        return this.characterService.batchUpdatePoints(data.sessionId, data);
+        return this.characterService.batchUpdatePoints(data.sessionId, data,data.country,data.countryCode);
     }
 
 }
+
+/*
+datadatadatadatadata {
+  sessionId: '47341a62-4b16-4225-b961-119e97b607bc',
+  country: 'India',
+  countryCode: 'IN',
+  points: [
+    {
+      characterId: 'c3ec78ce-8ce4-4829-9e01-128d3723c63a',
+      totalPlus: 0,
+      totalMinus: 11,
+      lastUpdate: 1750921310219,
+      pointsChange: -11
+    }
+  ]
+}
+
+*/ 
