@@ -32,6 +32,8 @@ export class AlgorithmicClicksService {
   private readonly logger = new Logger(AlgorithmicClicksService.name);
   private activeJobs: ActiveClickJob[] = [];
   private clickInterval: NodeJS.Timeout | null = null;
+  private readonly MAX_CONCURRENT_CLICKS = 5; // Limit concurrent DB operations
+  private processingClicks = false; // Flag to prevent overlapping processing
 
   private readonly popularCountries: CountryConfig[] = [
     { name: 'Hong Kong', code: 'HK' },
@@ -184,59 +186,122 @@ export class AlgorithmicClicksService {
   }
 
   private async processClickJobs() {
+    // Prevent overlapping processing
+    if (this.processingClicks) {
+      return;
+    }
+    
+    this.processingClicks = true;
     const currentTime = Date.now();
     
-    for (const job of this.activeJobs) {
-      // Calculate how many clicks should have been completed by now
-      const elapsedSeconds = (currentTime - job.startTime) / 1000;
-      const expectedClicks = Math.floor(elapsedSeconds * job.clicksPerSecond);
-      
-      // If we need to perform more clicks
-      if (expectedClicks > job.clicksCompleted && job.clicksCompleted < job.totalClicks) {
-        const clicksToPerform = Math.min(
-          expectedClicks - job.clicksCompleted,
-          job.totalClicks - job.clicksCompleted
-        );
+    try {
+      // Collect all clicks that need to be performed
+      const clicksToProcess: Array<{
+        job: ActiveClickJob;
+        characterId: string;
+        increment: boolean;
+        countryName: string;
+        countryCode: string;
+        sessionId: string;
+      }> = [];
 
-        // Perform the clicks, distributing across all characters
-        for (let i = 0; i < clicksToPerform; i++) {
-          if (job.clicksCompleted >= job.totalClicks) break;
-          
-          try {
-            const increment = job.scenario.type === 'thumbsUp';
+      for (const job of this.activeJobs) {
+        // Calculate how many clicks should have been completed by now
+        const elapsedSeconds = (currentTime - job.startTime) / 1000;
+        const expectedClicks = Math.floor(elapsedSeconds * job.clicksPerSecond);
+        
+        // If we need to perform more clicks
+        if (expectedClicks > job.clicksCompleted && job.clicksCompleted < job.totalClicks) {
+          const clicksToPerform = Math.min(
+            expectedClicks - job.clicksCompleted,
+            job.totalClicks - job.clicksCompleted
+          );
+
+          // Prepare clicks for this job
+          for (let i = 0; i < clicksToPerform; i++) {
+            if (job.clicksCompleted >= job.totalClicks) break;
             
-            // Cycle through characters to distribute clicks evenly
+            const increment = job.scenario.type === 'thumbsUp';
             const characterIndex = job.clicksCompleted % job.characters.length;
             const selectedCharacter = job.characters[characterIndex];
             
-            await this.characterService.updateCharacterPoints(
-              selectedCharacter.id,
+            clicksToProcess.push({
+              job,
+              characterId: selectedCharacter.id,
               increment,
-              job.country.name,
-              job.country.code,
-              job.sessionId
-            );
-
-            job.clicksCompleted++;
-            job.lastClickTime = currentTime;
-          } catch (error) {
-            this.logger.error(`Error performing click for ${job.country.name}:`, error);
+              countryName: job.country.name,
+              countryCode: job.country.code,
+              sessionId: job.sessionId
+            });
           }
         }
       }
-    }
 
-    // Log progress every 10 seconds
-    const elapsedSeconds = (currentTime - this.activeJobs[0]?.startTime || 0) / 1000;
-    if (elapsedSeconds > 0 && Math.floor(elapsedSeconds) % 10 === 0 && Math.floor(elapsedSeconds) <= 50) {
-      this.logProgress();
-    }
+      // Process clicks in batches to avoid overwhelming the database
+      if (clicksToProcess.length > 0) {
+        await this.processClicksInBatches(clicksToProcess, currentTime);
+      }
 
-    // Check if all jobs are complete
-    const allComplete = this.activeJobs.every(job => job.clicksCompleted >= job.totalClicks);
-    if (allComplete) {
-      this.logger.log('🎉 All click jobs completed');
-      this.clearActiveJobs();
+      // Log progress every 10 seconds
+      const elapsedSeconds = (currentTime - this.activeJobs[0]?.startTime || 0) / 1000;
+      if (elapsedSeconds > 0 && Math.floor(elapsedSeconds) % 10 === 0 && Math.floor(elapsedSeconds) <= 50) {
+        this.logProgress();
+      }
+
+      // Check if all jobs are complete
+      const allComplete = this.activeJobs.every(job => job.clicksCompleted >= job.totalClicks);
+      if (allComplete) {
+        this.logger.log('🎉 All click jobs completed');
+        this.clearActiveJobs();
+      }
+    } catch (error) {
+      this.logger.error('❌ Error in processClickJobs:', error);
+    } finally {
+      this.processingClicks = false;
+    }
+  }
+
+  private async processClicksInBatches(
+    clicksToProcess: Array<{
+      job: ActiveClickJob;
+      characterId: string;
+      increment: boolean;
+      countryName: string;
+      countryCode: string;
+      sessionId: string;
+    }>,
+    currentTime: number
+  ) {
+    // Process clicks in batches of MAX_CONCURRENT_CLICKS
+    for (let i = 0; i < clicksToProcess.length; i += this.MAX_CONCURRENT_CLICKS) {
+      const batch = clicksToProcess.slice(i, i + this.MAX_CONCURRENT_CLICKS);
+      
+      // Process this batch concurrently
+      const promises = batch.map(async (click) => {
+        try {
+          await this.characterService.updateCharacterPoints(
+            click.characterId,
+            click.increment,
+            click.countryName,
+            click.countryCode,
+            click.sessionId
+          );
+          
+          // Update job progress
+          click.job.clicksCompleted++;
+          click.job.lastClickTime = currentTime;
+        } catch (error) {
+          this.logger.error(`Error performing click for ${click.countryName}:`, error);
+        }
+      });
+
+      // Wait for this batch to complete before processing the next batch
+      await Promise.all(promises);
+      
+      // Add a small delay between batches to give the database a breather
+      if (i + this.MAX_CONCURRENT_CLICKS < clicksToProcess.length) {
+        await new Promise(resolve => setTimeout(resolve, 50)); // 50ms delay between batches
+      }
     }
   }
 
