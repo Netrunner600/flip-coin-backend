@@ -12,6 +12,13 @@ interface ClickScenario {
   type: 'thumbsUp' | 'middleFinger';
 }
 
+interface CharacterClickScenario {
+  id: string;
+  name: string;
+  count: number;
+  type: 'thumbsUp' | 'middleFinger';
+}
+
 interface ActiveClickJob {
   country: CountryConfig;
   scenario: ClickScenario;
@@ -25,6 +32,13 @@ interface ActiveClickJob {
   startTime: number;
   lastClickTime: number;
   clicksCompleted: number;
+  pendingUpdates: Array<{
+    characterId: string;
+    increment: boolean;
+    countryName: string;
+    countryCode: string;
+  }>;
+  characterScenarios?: CharacterClickScenario[];
 }
 
 @Injectable()
@@ -34,6 +48,9 @@ export class AlgorithmicClicksService {
   private clickInterval: NodeJS.Timeout | null = null;
   private readonly MAX_CONCURRENT_CLICKS = 5; // Limit concurrent DB operations
   private processingClicks = false; // Flag to prevent overlapping processing
+  private allCharacters: Array<{ id: string; name: string; avatarUrl: string }> = []; // Cache characters
+  private lastCharacterFetch = 0; // Track when we last fetched characters
+  private isAlgorithmicCycleRunning = false; // Flag to prevent multiple cycles
 
   private readonly popularCountries: CountryConfig[] = [
     { name: 'Hong Kong', code: 'HK' },
@@ -69,21 +86,43 @@ export class AlgorithmicClicksService {
 
   constructor(private readonly characterService: CharacterService) {
     this.logger.log('Algorithmic clicks service initialized - will run every 60 seconds');
+    this.initializeCharacters();
+  }
+
+  private async initializeCharacters() {
+    try {
+      this.allCharacters = await this.characterService.getAllCharactersForAlgorithmic();
+      this.lastCharacterFetch = Date.now();
+      this.logger.log(`📚 Cached ${this.allCharacters.length} characters for algorithmic clicks`);
+    } catch (error) {
+      this.logger.error('Failed to initialize characters:', error);
+    }
   }
 
   @Cron('*/60 * * * * *') // Run every 60 seconds
   async handleAlgorithmicClicks() {
     try {
+      if (this.isAlgorithmicCycleRunning) {
+        this.logger.log('⏳ Algorithmic clicks cycle is already running');
+        return;
+      }
+
+      this.isAlgorithmicCycleRunning = true;
       this.logger.log('🚀 Starting new algorithmic clicks cycle...');
       
       // Clear any existing jobs
       this.clearActiveJobs();
       
-      // Randomly pick 1-3 countries
-      const numCountries = Math.floor(Math.random() * 3) + 1; // 1, 2, or 3
+      // Refresh characters cache every 5 minutes
+      if (Date.now() - this.lastCharacterFetch > 5 * 60 * 1000) {
+        await this.initializeCharacters();
+      }
+      
+      // Randomly pick 2-6 countries (as requested)
+      const numCountries = Math.floor(Math.random() * 5) + 2; // 2, 3, 4, 5, or 6
       const selectedCountries = this.getRandomCountries(numCountries);
 
-      this.logger.log(`🎯 Selected ${numCountries} countries: ${selectedCountries.map(c => c.name).join(', ')}`);
+      // this.logger.log(`🎯 Selected ${numCountries} countries: ${selectedCountries.map(c => c.name).join(', ')}`);
 
       // Create click jobs for each selected country
       const jobs: ActiveClickJob[] = [];
@@ -113,6 +152,8 @@ export class AlgorithmicClicksService {
       this.logJobSummary();
     } catch (error) {
       this.logger.error('❌ Error starting algorithmic clicks:', error);
+    } finally {
+      this.isAlgorithmicCycleRunning = false;
     }
   }
 
@@ -123,49 +164,55 @@ export class AlgorithmicClicksService {
     });
   }
 
-  private async createClickJob(country: CountryConfig, scenario: ClickScenario): Promise<ActiveClickJob | null> {
+  private async createClickJob(country: CountryConfig, _scenario: ClickScenario): Promise<ActiveClickJob | null> {
     try {
-      // Get all characters
-      const characters = await this.characterService.getAllCharactersForAlgorithmic();
-      
-      if (!characters || characters.length === 0) {
-        this.logger.warn('No characters found for algorithmic clicks');
+      if (!this.allCharacters || this.allCharacters.length === 0) {
+        this.logger.warn('No characters available for algorithmic clicks');
         return null;
       }
 
-      // Select 2-5 random characters
-      const numCharacters = Math.floor(Math.random() * 4) + 2; // 2, 3, 4, or 5
-      const shuffledCharacters = [...characters];
+      // Select 3-5 random characters (as requested)
+      const numCharacters = Math.floor(Math.random() * 3) + 3; // 3, 4, or 5
+      const shuffledCharacters = [...this.allCharacters];
       for (let i = shuffledCharacters.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
         [shuffledCharacters[i], shuffledCharacters[j]] = [shuffledCharacters[j], shuffledCharacters[i]];
       }
       const selectedCharacters = shuffledCharacters.slice(0, numCharacters);
-      
+
       // Generate a fake session ID for algorithmic clicks
       const sessionId = `algo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-      // Calculate clicks per second (distribute evenly across 60 seconds)
-      const clicksPerSecond = scenario.count / 60;
+      // For each character, generate its own random click scenario
+      const characterScenarios: CharacterClickScenario[] = selectedCharacters.map(char => ({
+        id: char.id,
+        name: char.name,
+        count: Math.max(Math.floor(Math.random() * (1500 - 300 + 1)) + 300, 300), // Enforce minimum 300
+        type: Math.random() < 0.5 ? 'thumbsUp' : 'middleFinger',
+      }));
+
+      // Calculate total clicks for the job (sum of all character clicks)
+      const totalClicks = characterScenarios.reduce((sum, c) => sum + c.count, 0);
+      const clicksPerSecond = totalClicks / 60;
 
       const job: ActiveClickJob = {
         country,
-        scenario,
-        characters: selectedCharacters.map(char => ({
-          id: char.id,
-          name: char.name
-        })),
+        scenario: { count: totalClicks, type: 'thumbsUp' }, // scenario is not used anymore, but keep for compatibility
+        characters: characterScenarios.map(({ id, name }) => ({ id, name })),
         sessionId,
-        totalClicks: scenario.count,
+        totalClicks,
         clicksPerSecond,
         startTime: Date.now(),
         lastClickTime: 0,
-        clicksCompleted: 0
+        clicksCompleted: totalClicks, // Mark as completed immediately
+        pendingUpdates: [],
+        // @ts-ignore
+        characterScenarios, // add this property for use in final calculation
       };
 
-      const characterNames = selectedCharacters.map(char => char.name).join(', ');
-      this.logger.log(`Created job: ${scenario.count} ${scenario.type} clicks for ${country.name} on ${numCharacters} characters (${characterNames}) - ${clicksPerSecond.toFixed(2)} clicks/sec`);
-      
+      const characterNames = characterScenarios.map(char => `${char.name} (${char.count} ${char.type})`).join(', ');
+      this.logger.log(`Created job: ${totalClicks} total clicks for ${country.name} on ${numCharacters} characters (${characterNames}) - ${clicksPerSecond.toFixed(2)} clicks/sec`);
+
       return job;
     } catch (error) {
       this.logger.error(`Error creating click job for ${country.name}:`, error);
@@ -179,10 +226,10 @@ export class AlgorithmicClicksService {
       clearInterval(this.clickInterval);
     }
 
-    // Run clicks every 100ms to ensure smooth distribution
+    // Run clicks every 1000ms (1 second) to reduce frequency and batch better
     this.clickInterval = setInterval(() => {
       this.processClickJobs();
-    }, 100); // 100ms intervals = 10 times per second
+    }, 1000); // 1000ms intervals = 1 time per second
   }
 
   private async processClickJobs() {
@@ -195,64 +242,20 @@ export class AlgorithmicClicksService {
     const currentTime = Date.now();
     
     try {
-      // Collect all clicks that need to be performed
-      const clicksToProcess: Array<{
-        job: ActiveClickJob;
-        characterId: string;
-        increment: boolean;
-        countryName: string;
-        countryCode: string;
-        sessionId: string;
-      }> = [];
-
-      for (const job of this.activeJobs) {
-        // Calculate how many clicks should have been completed by now
-        const elapsedSeconds = (currentTime - job.startTime) / 1000;
-        const expectedClicks = Math.floor(elapsedSeconds * job.clicksPerSecond);
-        
-        // If we need to perform more clicks
-        if (expectedClicks > job.clicksCompleted && job.clicksCompleted < job.totalClicks) {
-          const clicksToPerform = Math.min(
-            expectedClicks - job.clicksCompleted,
-            job.totalClicks - job.clicksCompleted
-          );
-
-          // Prepare clicks for this job
-          for (let i = 0; i < clicksToPerform; i++) {
-            if (job.clicksCompleted >= job.totalClicks) break;
-            
-            const increment = job.scenario.type === 'thumbsUp';
-            const characterIndex = job.clicksCompleted % job.characters.length;
-            const selectedCharacter = job.characters[characterIndex];
-            
-            clicksToProcess.push({
-              job,
-              characterId: selectedCharacter.id,
-              increment,
-              countryName: job.country.name,
-              countryCode: job.country.code,
-              sessionId: job.sessionId
-            });
-          }
-        }
-      }
-
-      // Process clicks in batches to avoid overwhelming the database
-      if (clicksToProcess.length > 0) {
-        await this.processClicksInBatches(clicksToProcess, currentTime);
-      }
-
-      // Log progress every 10 seconds
-      const elapsedSeconds = (currentTime - this.activeJobs[0]?.startTime || 0) / 1000;
-      if (elapsedSeconds > 0 && Math.floor(elapsedSeconds) % 10 === 0 && Math.floor(elapsedSeconds) <= 50) {
-        this.logProgress();
-      }
-
       // Check if all jobs are complete
       const allComplete = this.activeJobs.every(job => job.clicksCompleted >= job.totalClicks);
       if (allComplete) {
-        this.logger.log('🎉 All click jobs completed');
+        // Calculate final counts for all jobs at once
+        await this.calculateAndProcessFinalCounts();
+        await this.sendFinalEvents();
         this.clearActiveJobs();
+        return;
+      }
+
+      // Log progress every 30 seconds (reduced frequency)
+      const elapsedSeconds = (currentTime - this.activeJobs[0]?.startTime || 0) / 1000;
+      if (elapsedSeconds > 0 && Math.floor(elapsedSeconds) % 30 === 0 && Math.floor(elapsedSeconds) <= 30) {
+        this.logProgress();
       }
     } catch (error) {
       this.logger.error('❌ Error in processClickJobs:', error);
@@ -261,47 +264,74 @@ export class AlgorithmicClicksService {
     }
   }
 
-  private async processClicksInBatches(
-    clicksToProcess: Array<{
-      job: ActiveClickJob;
-      characterId: string;
-      increment: boolean;
-      countryName: string;
-      countryCode: string;
-      sessionId: string;
-    }>,
-    currentTime: number
-  ) {
-    // Process clicks in batches of MAX_CONCURRENT_CLICKS
-    for (let i = 0; i < clicksToProcess.length; i += this.MAX_CONCURRENT_CLICKS) {
-      const batch = clicksToProcess.slice(i, i + this.MAX_CONCURRENT_CLICKS);
-      
-      // Process this batch concurrently
-      const promises = batch.map(async (click) => {
+  private async calculateAndProcessFinalCounts() {
+    try {
+      this.logger.log('📊 Calculating final click counts for all jobs...');
+      const finalCounts = new Map<string, {
+        characterId: string;
+        countryName: string;
+        countryCode: string;
+        sessionId: string;
+        totalPlus: number;
+        totalMinus: number;
+        pointsChange: number;
+      }>();
+
+      for (const job of this.activeJobs) {
+        // @ts-ignore
+        const characterScenarios: CharacterClickScenario[] = job.characterScenarios || [];
+        for (const scenario of characterScenarios) {
+          const isIncrement = scenario.type === 'thumbsUp';
+          const key = `${scenario.id}_${job.country.name}_${job.country.code}`;
+          if (finalCounts.has(key)) {
+            const existing = finalCounts.get(key)!;
+            if (isIncrement) {
+              existing.totalPlus += scenario.count;
+              existing.pointsChange += scenario.count;
+            } else {
+              existing.totalMinus += scenario.count;
+              existing.pointsChange -= scenario.count;
+            }
+          } else {
+            finalCounts.set(key, {
+              characterId: scenario.id,
+              countryName: job.country.name,
+              countryCode: job.country.code,
+              sessionId: job.sessionId,
+              totalPlus: isIncrement ? scenario.count : 0,
+              totalMinus: isIncrement ? 0 : scenario.count,
+              pointsChange: isIncrement ? scenario.count : -scenario.count
+            });
+          }
+        }
+      }
+
+      // Process all final counts
+      const batchPromises = Array.from(finalCounts.values()).map(async (count) => {
         try {
-          await this.characterService.updateCharacterPoints(
-            click.characterId,
-            click.increment,
-            click.countryName,
-            click.countryCode,
-            click.sessionId
+          await this.characterService.batchUpdatePointsSilent(
+            count.sessionId,
+            {
+              points: [{
+                characterId: count.characterId,
+                totalPlus: count.totalPlus,
+                totalMinus: count.totalMinus,
+                pointsChange: count.pointsChange,
+                lastUpdate: Date.now()
+              }]
+            },
+            count.countryName,
+            count.countryCode
           );
-          
-          // Update job progress
-          click.job.clicksCompleted++;
-          click.job.lastClickTime = currentTime;
+          this.logger.debug(`Final batch: ${count.characterId} (${count.countryName}) - +${count.totalPlus} -${count.totalMinus} = ${count.pointsChange}`);
         } catch (error) {
-          this.logger.error(`Error performing click for ${click.countryName}:`, error);
+          this.logger.error(`Error processing final count for ${count.characterId}:`, error);
         }
       });
-
-      // Wait for this batch to complete before processing the next batch
-      await Promise.all(promises);
-      
-      // Add a small delay between batches to give the database a breather
-      if (i + this.MAX_CONCURRENT_CLICKS < clicksToProcess.length) {
-        await new Promise(resolve => setTimeout(resolve, 50)); // 50ms delay between batches
-      }
+      await Promise.all(batchPromises);
+      this.logger.log(`✅ Processed ${finalCounts.size} final batches with total counts`);
+    } catch (error) {
+      this.logger.error('❌ Error calculating final counts:', error);
     }
   }
 
@@ -334,8 +364,57 @@ export class AlgorithmicClicksService {
   }
 
   private getRandomScenario(): ClickScenario {
-    // Add more randomness by using timestamp as seed
-    const randomIndex = Math.floor((Math.random() + Date.now() % 1000 / 1000) * this.clickScenarios.length) % this.clickScenarios.length;
-    return this.clickScenarios[randomIndex];
+    // Generate random click count between 300 and 1500
+    const randomClickCount = Math.floor(Math.random() * (1500 - 300 + 1)) + 300;
+    
+    const randomType = Math.random() < Math.random() ? 'thumbsUp' : 'middleFinger';
+
+    return {
+      count: randomClickCount,
+      type: randomType
+    };
+  }
+
+  private async sendFinalEvents() {
+    try {
+      this.logger.log('📡 Sending final events after algorithmic clicks cycle...');
+      
+      // Collect all unique characters that were updated
+      const updatedCharacters = new Set<string>();
+      let totalClicks = 0;
+
+      for (const job of this.activeJobs) {
+        for (const character of job.characters) {
+          updatedCharacters.add(character.id);
+        }
+        totalClicks += job.clicksCompleted;
+      }
+
+      // Send socket events for all updated characters
+      if (updatedCharacters.size > 0) {
+        this.logger.log(`✅ Sending events for ${updatedCharacters.size} characters after ${totalClicks} total clicks`);
+        
+        // Send one update per character to trigger socket events
+        for (const characterId of updatedCharacters) {
+          try {
+             const randomIndex = Math.floor(Math.random() * this.popularCountries.length);
+  const selectedCountry = this.popularCountries[randomIndex];
+            await this.characterService.updateCharacterPoints(
+              characterId,
+              true, // This doesn't matter since we're just triggering events
+              selectedCountry.name, // Generic country for summary
+              selectedCountry.code,
+              `algo_final_${Date.now()}`
+            );
+          } catch (error) {
+            this.logger.error(`Error sending final event for character ${characterId}:`, error);
+          }
+        }
+      }
+
+      this.logger.log(`✅ Final events sent for ${updatedCharacters.size} characters`);
+    } catch (error) {
+      this.logger.error('❌ Error sending final events:', error);
+    }
   }
 } 

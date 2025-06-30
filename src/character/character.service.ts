@@ -380,6 +380,83 @@ export class CharacterService {
     return { success: true };
   }
 
+  async batchUpdatePointsSilent(
+    sessionId: string,
+    data: {
+      points: Array<{
+        characterId: string;
+        totalPlus: number;
+        totalMinus: number;
+        pointsChange: number;
+        lastUpdate: number;
+      }>
+    },
+    country: string,
+    countryCode: string
+  ) {
+    const updates = data.points.map(async ({ characterId, totalPlus, totalMinus, pointsChange }) => {
+      const character = await this.characterModel.findByPk(characterId);
+      if (!character) return;
+      
+      // Get today's date range
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+
+      // Find existing entry for today
+      const existingEntry = await this.pointsHistoryModel.findOne({
+        where: {
+          characterId,
+          sessionId,
+          created_at: {
+            [Op.between]: [todayStart, todayEnd]
+          },
+          country: country,
+          countryCode: countryCode,
+        },
+        raw: true
+      });
+      
+      if (existingEntry) {
+        // Calculate new values
+        const newTotalPlus = Number(existingEntry.totalPlus) + Number(totalPlus);
+        const newTotalMinus = Number(existingEntry.totalMinus) + Number(totalMinus);
+        const newPointsChange = Number(newTotalPlus) - Number(newTotalMinus);
+
+        await this.pointsHistoryModel.update(
+          {
+            totalPlus: newTotalPlus,
+            totalMinus: newTotalMinus,
+            pointsChange: newPointsChange,
+          },
+          {
+            where: {
+              characterId,
+              country,
+              countryCode,
+              sessionId,
+            },
+          }
+        );
+      } else {
+        // Create new entry if none exists for today
+        await this.pointsHistoryModel.create({
+          characterId,
+          sessionId,
+          totalPlus,
+          totalMinus,
+          pointsChange: totalPlus - totalMinus,
+          country,
+          countryCode,
+        });
+      }
+    });
+
+    await Promise.all(updates);
+    return { success: true };
+  }
+
   async getAllCharactersForAlgorithmic() {
     try {
       const characters = await this.characterModel.findAll({
