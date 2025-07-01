@@ -51,6 +51,7 @@ export class AlgorithmicClicksService {
   private allCharacters: Array<{ id: string; name: string; avatarUrl: string }> = []; // Cache characters
   private lastCharacterFetch = 0; // Track when we last fetched characters
   private isAlgorithmicCycleRunning = false; // Flag to prevent multiple cycles
+  private recentCountrySelections: string[][] = []; // Track last 3 cycles' country codes
 
   private readonly popularCountries: CountryConfig[] = [
     { name: 'Hong Kong', code: 'HK' },
@@ -75,14 +76,7 @@ export class AlgorithmicClicksService {
     { name: 'Germany', code: 'DE' }
   ];
 
-  private readonly clickScenarios: ClickScenario[] = [
-    { count: 300, type: 'thumbsUp' },
-    { count: 300, type: 'middleFinger' },
-    { count: 500, type: 'thumbsUp' },
-    { count: 500, type: 'middleFinger' },
-    { count: 1000, type: 'thumbsUp' },
-    { count: 1000, type: 'middleFinger' }
-  ];
+  private readonly clickScenarioCounts: number[] = [300, 500, 1000];
 
   constructor(private readonly characterService: CharacterService) {
     this.logger.log('Algorithmic clicks service initialized - will run every 60 seconds');
@@ -118,9 +112,12 @@ export class AlgorithmicClicksService {
         await this.initializeCharacters();
       }
       
-      // Randomly pick 2-6 countries (as requested)
-      const numCountries = Math.floor(Math.random() * 5) + 2; // 2, 3, 4, 5, or 6
-      const selectedCountries = this.getRandomCountries(numCountries);
+      // Randomly pick 1-3 countries, avoiding repeats from last 3 cycles
+      const numCountries = Math.floor(Math.random() * 3) + 1; // 1, 2, or 3
+      const selectedCountries = this.getRandomCountriesNoRecent(numCountries);
+      // Track this cycle's selection
+      this.recentCountrySelections.push(selectedCountries.map(c => c.code));
+      if (this.recentCountrySelections.length > 3) this.recentCountrySelections.shift();
 
       // this.logger.log(`🎯 Selected ${numCountries} countries: ${selectedCountries.map(c => c.name).join(', ')}`);
 
@@ -128,8 +125,8 @@ export class AlgorithmicClicksService {
       const jobs: ActiveClickJob[] = [];
       
       for (const country of selectedCountries) {
-        const scenario = this.getRandomScenario();
-        const job = await this.createClickJob(country, scenario);
+        const scenarioCount = this.getRandomScenarioCount();
+        const job = await this.createClickJobClient(country, scenarioCount);
         if (job) {
           jobs.push(job);
         }
@@ -162,62 +159,6 @@ export class AlgorithmicClicksService {
     this.activeJobs.forEach((job, index) => {
       this.logger.log(`  ${index + 1}. ${job.country.name}: ${job.scenario.count} ${job.scenario.type} clicks (${job.clicksPerSecond.toFixed(2)}/sec) on ${job.characters.length} characters`);
     });
-  }
-
-  private async createClickJob(country: CountryConfig, _scenario: ClickScenario): Promise<ActiveClickJob | null> {
-    try {
-      if (!this.allCharacters || this.allCharacters.length === 0) {
-        this.logger.warn('No characters available for algorithmic clicks');
-        return null;
-      }
-
-      // Select 3-5 random characters (as requested)
-      const numCharacters = Math.floor(Math.random() * 3) + 3; // 3, 4, or 5
-      const shuffledCharacters = [...this.allCharacters];
-      for (let i = shuffledCharacters.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffledCharacters[i], shuffledCharacters[j]] = [shuffledCharacters[j], shuffledCharacters[i]];
-      }
-      const selectedCharacters = shuffledCharacters.slice(0, numCharacters);
-
-      // Generate a fake session ID for algorithmic clicks
-      const sessionId = `algo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-      // For each character, generate its own random click scenario
-      const characterScenarios: CharacterClickScenario[] = selectedCharacters.map(char => ({
-        id: char.id,
-        name: char.name,
-        count: Math.max(Math.floor(Math.random() * (1500 - 300 + 1)) + 300, 300), // Enforce minimum 300
-        type: Math.random() < 0.5 ? 'thumbsUp' : 'middleFinger',
-      }));
-
-      // Calculate total clicks for the job (sum of all character clicks)
-      const totalClicks = characterScenarios.reduce((sum, c) => sum + c.count, 0);
-      const clicksPerSecond = totalClicks / 60;
-
-      const job: ActiveClickJob = {
-        country,
-        scenario: { count: totalClicks, type: 'thumbsUp' }, // scenario is not used anymore, but keep for compatibility
-        characters: characterScenarios.map(({ id, name }) => ({ id, name })),
-        sessionId,
-        totalClicks,
-        clicksPerSecond,
-        startTime: Date.now(),
-        lastClickTime: 0,
-        clicksCompleted: totalClicks, // Mark as completed immediately
-        pendingUpdates: [],
-        // @ts-ignore
-        characterScenarios, // add this property for use in final calculation
-      };
-
-      const characterNames = characterScenarios.map(char => `${char.name} (${char.count} ${char.type})`).join(', ');
-      this.logger.log(`Created job: ${totalClicks} total clicks for ${country.name} on ${numCharacters} characters (${characterNames}) - ${clicksPerSecond.toFixed(2)} clicks/sec`);
-
-      return job;
-    } catch (error) {
-      this.logger.error(`Error creating click job for ${country.name}:`, error);
-      return null;
-    }
   }
 
   private startClickDistribution() {
@@ -353,9 +294,12 @@ export class AlgorithmicClicksService {
     this.activeJobs = [];
   }
 
-  private getRandomCountries(count: number): CountryConfig[] {
-    // Use a more robust shuffling algorithm
-    const shuffled = [...this.popularCountries];
+  private getRandomCountriesNoRecent(count: number): CountryConfig[] {
+    const recent = new Set(this.recentCountrySelections.flat());
+    const available = this.popularCountries.filter(c => !recent.has(c.code));
+    let pool = available.length >= count ? available : this.popularCountries;
+    // Shuffle
+    const shuffled = [...pool];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
@@ -363,16 +307,65 @@ export class AlgorithmicClicksService {
     return shuffled.slice(0, count);
   }
 
-  private getRandomScenario(): ClickScenario {
-    // Generate random click count between 300 and 1500
-    const randomClickCount = Math.floor(Math.random() * (1500 - 300 + 1)) + 300;
-    
-    const randomType = Math.random() < Math.random() ? 'thumbsUp' : 'middleFinger';
+  private getRandomScenarioCount(): number {
+    const idx = Math.floor(Math.random() * this.clickScenarioCounts.length);
+    return this.clickScenarioCounts[idx];
+  }
 
-    return {
-      count: randomClickCount,
-      type: randomType
-    };
+  private async createClickJobClient(country: CountryConfig, scenarioCount: number): Promise<ActiveClickJob | null> {
+    try {
+      if (!this.allCharacters || this.allCharacters.length === 0) {
+        this.logger.warn('No characters available for algorithmic clicks');
+        return null;
+      }
+      // Select 1-3 random characters
+      const numCharacters = Math.floor(Math.random() * 3) + 1; // 1, 2, or 3
+      const shuffledCharacters = [...this.allCharacters];
+      for (let i = shuffledCharacters.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledCharacters[i], shuffledCharacters[j]] = [shuffledCharacters[j], shuffledCharacters[i]];
+      }
+      const selectedCharacters = shuffledCharacters.slice(0, numCharacters);
+      const sessionId = `algo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      // For each character, assign the scenarioCount and reaction type
+      const characterScenarios: CharacterClickScenario[] = selectedCharacters.map(char => {
+        // Morghen Freemon logic
+        const isMorghen = char.name.toLowerCase().includes('morghen freemon');
+        let type: 'thumbsUp' | 'middleFinger';
+        if (isMorghen) {
+          type = Math.random() < 0.7 ? 'thumbsUp' : 'middleFinger';
+        } else {
+          type = Math.random() < 0.7 ? 'middleFinger' : 'thumbsUp';
+        }
+        return {
+          id: char.id,
+          name: char.name,
+          count: scenarioCount,
+          type,
+        };
+      });
+      const totalClicks = characterScenarios.reduce((sum, c) => sum + c.count, 0);
+      const clicksPerSecond = totalClicks / 60;
+      const job: ActiveClickJob = {
+        country,
+        scenario: { count: totalClicks, type: 'thumbsUp' },
+        characters: characterScenarios.map(({ id, name }) => ({ id, name })),
+        sessionId,
+        totalClicks,
+        clicksPerSecond,
+        startTime: Date.now(),
+        lastClickTime: 0,
+        clicksCompleted: totalClicks,
+        pendingUpdates: [],
+        characterScenarios,
+      };
+      const characterNames = characterScenarios.map(char => `${char.name} (${char.count} ${char.type})`).join(', ');
+      this.logger.log(`Created job: ${totalClicks} total clicks for ${country.name} on ${numCharacters} characters (${characterNames}) - ${clicksPerSecond.toFixed(2)} clicks/sec`);
+      return job;
+    } catch (error) {
+      this.logger.error(`Error creating click job for ${country.name}:`, error);
+      return null;
+    }
   }
 
   private async sendFinalEvents() {
@@ -402,8 +395,8 @@ export class AlgorithmicClicksService {
             await this.characterService.updateCharacterPoints(
               characterId,
               true, // This doesn't matter since we're just triggering events
-              selectedCountry.name, // Generic country for summary
-              selectedCountry.code,
+              "DEMO", // Generic country for summary
+              "TEST",
               `algo_final_${Date.now()}`
             );
           } catch (error) {
