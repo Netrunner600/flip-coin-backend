@@ -86,6 +86,8 @@ export class CharacterController {
             }>;
         }
     ) {
+
+        
         return this.characterService.batchUpdatePoints(data.sessionId, data,data.country,data.countryCode);
     }
 

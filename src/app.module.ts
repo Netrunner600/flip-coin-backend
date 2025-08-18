@@ -14,6 +14,8 @@ import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 import { redisStore } from 'cache-manager-redis-store';
 import { CacheModule } from '@nestjs/cache-manager';
+import { Throttle, ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 
 @Module({
   imports: [
@@ -23,8 +25,8 @@ import { CacheModule } from '@nestjs/cache-manager';
       envFilePath: '.env',
     }),
     ServeStaticModule.forRoot({
-      rootPath: join(__dirname, '..', 'public'), 
-      serveRoot: '/public', 
+      rootPath: join(__dirname, '..', 'public'),
+      serveRoot: '/public',
     }),
     CacheModule.register({
       store: redisStore,
@@ -37,25 +39,43 @@ import { CacheModule } from '@nestjs/cache-manager';
       useFactory: (configService: ConfigService) => ({
         dialect: 'mysql',
         host: configService.get<string>('database.host'),
-        port: parseInt(configService.get<string>('database.port') || '3306', 10),
+        port: parseInt(
+          configService.get<string>('database.port') || '3306',
+          10,
+        ),
         username: configService.get<string>('database.username'),
         password: configService.get<string>('database.password'),
         database: configService.get<string>('database.database'),
-        models: [Character,PointsHistory],
+        models: [Character, PointsHistory],
         autoLoadModels: true,
-        synchronize: true,
-
+        synchronize: false, // Set to false in production
+        pool: {
+          max: configService.get<number>('database.pool.max'),
+          min: configService.get<number>('database.pool.min'),
+          acquire: configService.get<number>('database.pool.acquire'),
+          idle: configService.get<number>('database.pool.idle'),
+        },
       }),
       inject: [ConfigService],
     }),
     CharacterModule,
     LeaderboardModule,
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60, // 1 minute
+        limit: 10, // 10 requests per minute
+      },
+    ]),
     // RedisModule
   ],
   controllers: [AppController],
-  providers: [AppService,SocketGateway],
-
-
-
+  providers: [
+    AppService,
+    SocketGateway,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
-export class AppModule { }
+export class AppModule {}

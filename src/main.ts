@@ -4,20 +4,20 @@ import * as dotenv from "dotenv";
 import * as bodyParser from "body-parser";
 import * as fs from 'fs';
 import * as https from 'https';
+import helmet from "helmet";
+import * as compression from "compression";
+import * as cookieParser from 'cookie-parser';
+import * as csurf from 'csurf';
 
 async function bootstrap() {
   dotenv.config();
-  
-  // Debug logging
-  console.log('Environment variables:', {
-    USE_HTTPS: process.env.USE_HTTPS,
-    SERVER_PORT: process.env.SERVER_PORT
-  });
 
   const app = await NestFactory.create(AppModule);
 
   app.use(bodyParser.json({ limit: "100mb" }));
   app.use(bodyParser.urlencoded({ extended: true }));
+  app.use(helmet());
+  app.use(compression());
 
   // CORS configuration for WebSocket and HTTP
   app.enableCors({
@@ -57,6 +57,17 @@ async function bootstrap() {
   process.on("unhandledRejection", (reason, promise) => {
     console.error("Unhandled Rejection:", reason);
   });
+
+  // app.use(cookieParser());
+  // app.use(
+  //   csurf({
+  //     cookie: {
+  //       httpOnly: true,
+  //       secure: process.env.NODE_ENV === 'production',
+  //       sameSite: 'strict',
+  //     },
+  //   }),
+  // );
 
   const PORT = process.env.SERVER_PORT || 8000;
   

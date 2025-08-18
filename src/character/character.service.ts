@@ -57,8 +57,8 @@ export class CharacterService {
       ],
       raw: true,
     });
-
-    console.log(charactersWithUserPoints)
+console.log("updating points");
+    //console.log(charactersWithUserPoints)
     return charactersWithUserPoints;
   }
 
@@ -315,6 +315,7 @@ export class CharacterService {
       const todayEnd = new Date();
       todayEnd.setHours(23, 59, 59, 999);
 
+     
       // Find existing entry for today
       const existingEntry = await this.pointsHistoryModel.findOne({
         where: {
