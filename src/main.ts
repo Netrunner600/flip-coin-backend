@@ -26,7 +26,8 @@ async function bootstrap() {
         'http://localhost:3000',
         'https://flipn.click',
         'https://d51e-103-149-154-170.ngrok-free.app',
-        /\.ngrok-free\.app$/
+        /\.ngrok-free\.app$/,
+        '*'
       ];
       
       // Allow requests with no origin (like mobile apps, curl, etc)
