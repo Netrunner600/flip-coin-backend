@@ -16,6 +16,7 @@ import { redisStore } from 'cache-manager-redis-store';
 import { CacheModule } from '@nestjs/cache-manager';
 import { Throttle, ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
+import { DocumentsModule } from './documents/documents.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { APP_GUARD } from '@nestjs/core';
     }),
     CharacterModule,
     LeaderboardModule,
+    DocumentsModule,
     ThrottlerModule.forRoot([
       {
         ttl: 60, // 1 minute
