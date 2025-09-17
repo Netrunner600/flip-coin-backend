@@ -1,5 +1,10 @@
 // src/documents/documents.service.ts
-import { Injectable, InternalServerErrorException, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Document } from './entity/documents.model';
 import * as path from 'path';
@@ -10,9 +15,7 @@ const PUBLIC_ROOT = process.env.PUBLIC_DIR || path.join(process.cwd(), 'public')
 
 @Injectable()
 export class DocumentsService {
-  constructor(
-    @InjectModel(Document) private documentModel: typeof Document
-  ) {}
+  constructor(@InjectModel(Document) private documentModel: typeof Document) {}
 
   async createDocument(title: string, file: Express.Multer.File): Promise<Document> {
     if (!file || !file.filename) {
@@ -20,9 +23,11 @@ export class DocumentsService {
     }
 
     const location = `public/avatars/${file.filename}`;
+    const name = title || file.originalname || file.filename;
+    const type = file.mimetype || 'application/octet-stream';
 
     const document = await this.documentModel.create({
-      title,
+      title: name,
       location,
     });
 
@@ -57,9 +62,6 @@ export class DocumentsService {
     return full;
   }
 
-  /**
-   * Stream file to the client. Use Express Response type from 'express'.
-   */
   async downloadFile(res: ExpressResponse, relativePath: string): Promise<void> {
     try {
       const fullPath = await this.resolveSafe(relativePath);

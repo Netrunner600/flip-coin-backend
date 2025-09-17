@@ -1,31 +1,71 @@
 // src/documents/documents.controller.ts
-import { Controller, Post, Get, Param, UploadedFile, UseInterceptors, Body, HttpCode, Res } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  Controller,
+  Post,
+  Get,
+  Param,
+  UploadedFiles,
+  UseInterceptors,
+  Body,
+  HttpCode,
+  Res,
+  Logger,
+} from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { DocumentsService } from './documents.service';
 import { multerConfig } from '../config/multer.config';
-import { CreateDocumentDto } from './create-document.dto';
 import type { Response as ExpressResponse } from 'express';
+import { SkipThrottle } from '@nestjs/throttler';
+import type { Document as DocumentModel } from './entity/documents.model';
 
 @Controller('documents')
 export class DocumentsController {
-  constructor(private readonly documentsService: DocumentsService) {}
-  @Post('upload')
-  @UseInterceptors(FileInterceptor('file', multerConfig))
-  async uploadDocument(
-    @UploadedFile() file: Express.Multer.File,
-    @Body('title') title: string,
-  ) {
-    console.log('Uploaded file:', file);
+  private readonly logger = new Logger(DocumentsController.name);
 
-    // Save to DB
-    const document = await this.documentsService.createDocument(
-      title,
-      file, 
+  constructor(private readonly documentsService: DocumentsService) {}
+
+  // MULTI-file upload (frontend should send field name 'files')
+  @Post('upload')
+  @UseInterceptors(FilesInterceptor('files', 50, multerConfig)) // up to 50 files in one request
+  async uploadDocuments(
+    @UploadedFiles() files: Express.Multer.File[] = [],
+    @Body('title') title?: string,
+  ) {
+    this.logger.debug(
+      'Upload endpoint called, files:',
+      (files || []).map((f) => ({ originalname: f.originalname, mimetype: f.mimetype, filename: f.filename })),
     );
 
-    return document;
+    const created: Array<{ id: number; name: string; url: string; type: string; uploadedAt: Date }> = [];
+
+    for (const f of files || []) {
+      const doc: DocumentModel = await this.documentsService.createDocument(title || f.originalname || f.filename, f);
+      created.push({
+        id: (doc as any).id,
+        name: (doc as any).name,
+        url: (doc as any).location,
+        type: (doc as any).type,
+        uploadedAt: (doc as any).createdAt,
+      });
+    }
+    return created;
   }
 
+  // Keep single-file upload route if you still need it:
+  @Post('upload/single')
+  @UseInterceptors(FilesInterceptor('file', 1, multerConfig))
+  async uploadSingle(@UploadedFiles() files: Express.Multer.File[] = [], @Body('title') title?: string) {
+    const f = files?.[0];
+    if (!f) return [];
+    const doc = await this.documentsService.createDocument(title || f.originalname || f.filename, f);
+    return {
+      id: (doc as any).id,
+      name: (doc as any).name,
+      url: (doc as any).location,
+      type: (doc as any).type,
+      uploadedAt: (doc as any).createdAt,
+    };
+  }
 
   @Get()
   async getDocuments() {
@@ -34,15 +74,14 @@ export class DocumentsController {
 
   @Get(':id')
   async getDocument(@Param('id') id: number) {
-    return this.documentsService.getDocumentById(id);
+    return this.documentsService.getDocumentById(Number(id));
   }
 
- @Post('download')
+  // Download endpoint: skip throttle (recommended) since this serves files
+  @Post('download')
   @HttpCode(200)
+  @SkipThrottle()
   async download(@Body('path') relativePath: string, @Res() res: ExpressResponse) {
-    // await the service call so Nest can surface exceptions (404/400) properly
     await this.documentsService.downloadFile(res, relativePath);
-    // do NOT call res.send() afterwards; res.download ends/streams the response
   }
 }
-

@@ -10,4 +10,5 @@ export class Document extends Model<Document, { title: string; location: string 
 
   @Column
   location!: string;
+  name: never;
 }
