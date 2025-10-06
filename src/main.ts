@@ -25,7 +25,6 @@ async function bootstrap() {
       const allowedOrigins = [
         'http://localhost:3000',
         'https://flipn.click',
-        'https://fflipfront.vercel.app',
         'https://d51e-103-149-154-170.ngrok-free.app',
         /\.ngrok-free\.app$/
       ];
