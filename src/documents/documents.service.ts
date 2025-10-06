@@ -35,7 +35,7 @@ export class DocumentsService {
   }
 async deleteDocument(id: number): Promise<{ id: number; removedFile: boolean }> {
   const doc = await this.documentModel.findByPk(id);
-  if (!doc) throw new NotFoundException('Document not found');
+  //if (!doc) throw new NotFoundException('Document not found');
 
   // location like 'public/avatars/filename.ext'
   const location: string =
