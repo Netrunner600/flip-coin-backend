@@ -4,12 +4,14 @@ import {
   Post,
   Get,
   Param,
+  Delete,
   UploadedFiles,
   UseInterceptors,
   Body,
   HttpCode,
   Res,
   Logger,
+  ParseIntPipe,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { DocumentsService } from './documents.service';
@@ -51,6 +53,13 @@ export class DocumentsController {
     return created;
   }
 
+
+  @Delete(':id')
+async deleteDocument(@Param('id', ParseIntPipe) id: number) {
+  const result = await this.documentsService.deleteDocument(id);
+  // result = { id, removedFile }
+  return { success: true, ...result };
+}
   // Keep single-file upload route if you still need it:
   @Post('upload/single')
   @UseInterceptors(FilesInterceptor('file', 1, multerConfig))

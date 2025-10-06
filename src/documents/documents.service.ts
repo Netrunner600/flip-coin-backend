@@ -33,7 +33,29 @@ export class DocumentsService {
 
     return document;
   }
+async deleteDocument(id: number): Promise<{ id: number; removedFile: boolean }> {
+  const doc = await this.documentModel.findByPk(id);
+  if (!doc) throw new NotFoundException('Document not found');
 
+  // location like 'public/avatars/filename.ext'
+  const location: string =
+    (doc as any).location || (doc as any).url || '';
+
+  let removedFile = false;
+  if (location) {
+    const full = await this.resolveSafe(location);
+    try {
+      await fs.promises.unlink(full);
+      removedFile = true;
+    } catch (e: any) {
+      // Ignore if already gone; rethrow other fs errors
+      if (e?.code !== 'ENOENT') throw e;
+    }
+  }
+
+  await (doc as any).destroy();
+  return { id, removedFile };
+}
   async getAllDocuments(): Promise<Document[]> {
     return this.documentModel.findAll();
   }
