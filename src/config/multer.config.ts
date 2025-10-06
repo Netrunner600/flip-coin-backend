@@ -10,4 +10,9 @@ export const multerConfig = {
             cb(null, uniqueName);
         },
     }),
+    
+  limits: {
+    fileSize: 200 * 1024 * 1024, // 200MB, adjust as needed
+    files: 50,
+  },
 };
