@@ -4,7 +4,7 @@ export default registerAs('database', () => ({
   database: process.env.DB_NAME,
   password: process.env.DB_PASSWORD,
   host: process.env.DB_HOST,
-  port: parseInt(process.env.DB_PORT || '8000', 10),
+  port: parseInt(process.env.DB_PORT || '3306', 10),
   pool: {
     max: 10,
     min: 1,

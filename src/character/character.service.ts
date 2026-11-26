@@ -39,9 +39,9 @@ export class CharacterService {
         {
           model: this.pointsHistoryModel,
           as: "history",
-          attributes: ['sessionId'],
+          attributes: [],
           required: false,
-          where: { created_at: { [Op.gte]: last24Hours }, sessionId: userId },
+          where: { created_at: { [Op.gte]: last24Hours }, sessionId: userId || '' },
         },
       ],
       group: [
@@ -147,12 +147,12 @@ console.log("updating points");
         [Sequelize.fn("SUM", Sequelize.col("totalPlus")), "totalPlus"],
         // [Sequelize.fn("SUM", Sequelize.col("totalMinus")), "totalMinus"],
         [
-          Sequelize.fn("ABS", Sequelize.fn("SUM", Sequelize.cast(Sequelize.col("totalMinus"), "INTEGER"))),
+          Sequelize.fn("ABS", Sequelize.fn("SUM", Sequelize.col("totalMinus"))),
           "totalMinus"
         ],
       ],
       where: { created_at: { [Op.gte]: last24Hours } },
-      group: ["characterId"],
+      group: ["PointsHistory.characterId", "character.id", "character.name", "character.country", "character.countryCode", "character.loveAvatarUrl", "character.hateAvatarUrl", "character.avatarUrl", "character.headAvatarUrl"],
       include: [
         {
           model: Character,
@@ -170,11 +170,11 @@ console.log("updating points");
         [Sequelize.fn("SUM", Sequelize.col("totalPlus")), "totalPlus"],
         // [Sequelize.fn("SUM", Sequelize.col("totalMinus")), "totalMinus"],
         [
-          Sequelize.fn("ABS", Sequelize.fn("SUM", Sequelize.cast(Sequelize.col("totalMinus"), "INTEGER"))),
+          Sequelize.fn("ABS", Sequelize.fn("SUM", Sequelize.col("totalMinus"))),
           "totalMinus"
         ],
       ],
-      group: ["characterId"],
+      group: ["PointsHistory.characterId", "character.id", "character.name", "character.country", "character.countryCode", "character.loveAvatarUrl", "character.hateAvatarUrl", "character.avatarUrl", "character.headAvatarUrl"],
       include: [
         {
           model: Character,
@@ -194,7 +194,7 @@ console.log("updating points");
         [Sequelize.fn("SUM", Sequelize.col("totalPlus")), "totalPlus"],
         // [Sequelize.fn("SUM", Sequelize.col("totalMinus")), "totalMinus"],
         [
-          Sequelize.fn("ABS", Sequelize.fn("SUM", Sequelize.cast(Sequelize.col("totalMinus"), "INTEGER"))),
+          Sequelize.fn("ABS", Sequelize.fn("SUM", Sequelize.col("totalMinus"))),
           "totalMinus"
         ],
       ],
@@ -234,20 +234,19 @@ console.log("updating points");
       const points = await this.pointsHistoryModel.findAll({
         attributes: [
           "characterId",
-          "country",
-          "countryCode",
+          [Sequelize.col("PointsHistory.country"), "country"],
+          [Sequelize.col("PointsHistory.countryCode"), "countryCode"],
 
-          [Sequelize.fn("SUM", Sequelize.cast(Sequelize.col("pointsChange"), "INTEGER")), "totalPoints"],
-          [Sequelize.fn("SUM", Sequelize.cast(Sequelize.col("totalPlus"), "INTEGER")), "totalPlus"],
+          [Sequelize.fn("SUM", Sequelize.col("pointsChange")), "totalPoints"],
+          [Sequelize.fn("SUM", Sequelize.col("totalPlus")), "totalPlus"],
           // [Sequelize.fn("SUM", Sequelize.cast(Sequelize.col("totalMinus"), "INTEGER")), "totalMinus"],
           [
-            Sequelize.fn("ABS", Sequelize.fn("SUM", Sequelize.cast(Sequelize.col("totalMinus"), "INTEGER"))),
+            Sequelize.fn("ABS", Sequelize.fn("SUM", Sequelize.col("totalMinus"))),
             "totalMinus"
           ],
         ],
         where: { characterId: id, sessionId: userId },
-        group: ["characterId", 'sessionId', "country",
-          "countryCode"],
+        group: ["PointsHistory.characterId", "PointsHistory.sessionId", "PointsHistory.country", "PointsHistory.countryCode", "character.id", "character.name", "character.loveAvatarUrl", "character.hateAvatarUrl", "character.avatarUrl"],
         include: [
           {
             model: Character,
@@ -331,25 +330,17 @@ console.log("updating points");
         raw: true
       });
       if (existingEntry) {
-        // Calculate new values
-        const newTotalPlus = Number(existingEntry.totalPlus) + Number(totalPlus);
-        const newTotalMinus = Number(existingEntry.totalMinus) + Number(totalMinus);
-        const newPointsChange = Number(newTotalPlus) - Number(newTotalMinus);
-
-
-        await this.pointsHistoryModel.update(
+        // Increment only today's selected row, atomically in the database.
+        // Read/modify/write and a broad session match can lose concurrent
+        // clicks and overwrite older daily totals.
+        await this.pointsHistoryModel.increment(
           {
-            totalPlus: newTotalPlus,
-            totalMinus: newTotalMinus,
-            pointsChange: newPointsChange,
+            totalPlus: Number(totalPlus),
+            totalMinus: Number(totalMinus),
+            pointsChange: Number(totalPlus) - Number(totalMinus),
           },
           {
-            where: {
-              characterId,
-              country,
-              countryCode,
-              sessionId,
-            },
+            where: { id: existingEntry.id },
           }
         );
       } else {
